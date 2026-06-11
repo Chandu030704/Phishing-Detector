@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SecureAI Detection</title>
+
+    <style>
+        body {
+            font-family: 'Segoe UI';
+            margin: 0;
+            background: #eef2f7;
+            transition: 0.3s;
+        }
+
+        .header {
+            background: linear-gradient(90deg,#0a1f44,#1f4ed8);
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            margin-top: 60px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            width: 420px;
+            margin: auto;
+            border-radius: 12px;
+            box-shadow: 0px 15px 40px rgba(0,0,0,0.1);
+        }
+
+        input {
+            width: 90%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 12px 25px;
+            background: linear-gradient(90deg,#2563eb,#1d4ed8);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .safe {
+            background: #e6f4ea;
+            color: #1e7e34;
+        }
+
+        .danger {
+            background: #fdecea;
+            color: #b02a37;
+        }
+
+        .loader {
+            display: none;
+            margin-top: 15px;
+        }
+
+        .bar {
+            margin-top: 10px;
+            background: #ddd;
+            border-radius: 6px;
+            height: 24px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            width: 0%;
+            background: linear-gradient(90deg, green, red);
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            transition: width 0.8s ease;
+            text-align: center;
+            line-height: 12px;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .dark {
+            background: #0f172a;
+            color: white;
+        }
+
+        .toggle {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            cursor: pointer;
+        }
+
+        .history {
+            margin-top: 20px;
+            text-align: left;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+    <h2>🔐 SecureAI</h2>
+    <p>Advanced Phishing Detection Platform</p>
+    <span class="toggle" onclick="toggleMode()">☠ 𝓣𝓮𝓪𝓶 𝓚𝓪𝓷𝔂𝓪 𝓡𝓪𝓼𝓲 ☠</span>
+</div>
+
+<div class="container">
+<div class="card">
+
+<h2>Scan Website URL</h2>
+
+<input type="text" id="urlInput" placeholder="Enter URL (https://...)">
+<br><br>
+
+<button onclick="scanURL()">Analyze Website</button>
+
+<div class="loader" id="loader">🔍 Scanning...</div>
+
+<div id="resultBox"></div>
+
+<div class="bar">
+    <div id="riskBar" class="bar-fill">0%</div>
+</div>
+
+<div style="margin-top:6px; text-align:center; font-weight:bold;">Risk: <span id="riskText">0%</span></div>
+
+<div class="history" id="history"></div>
+
+</div>
+</div>
+
+<script>
+function validateURL(url) {
+    if (!url) return false;
+    return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("www.") || url.includes('.');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlInput = document.getElementById('urlInput');
+    if (urlInput) {
+        urlInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                scanURL();
+            }
+        });
+    }
+});
+
+async function scanURL() {
+    let url = document.getElementById("urlInput").value.trim();
+
+    if (!validateURL(url)) {
+        alert("Please enter a valid URL, like example.com or https://example.com");
+        return;
+    }
+
+    // Quick client-side heuristic to detect obvious phishing without calling server
+    const ipRegex = /(\d{1,3}\.){3}\d{1,3}/;
+    const suspiciousWords = ['login','verify','bank','secure','account','update','confirm'];
+    const urlLower = url.toLowerCase();
+    const looksLikeIP = ipRegex.test(url);
+    const hasSuspiciousWord = suspiciousWords.some(w => urlLower.includes(w));
+
+    // Relaxed heuristic: require suspicious words plus IP or @, or very long URL with suspicious words
+    const aggressiveLength = 150;
+    const heuristicTriggered = ((url.includes('@') && hasSuspiciousWord) || (looksLikeIP && hasSuspiciousWord) || (url.length > aggressiveLength && hasSuspiciousWord));
+    let userOverrideOpen = false;
+    if (heuristicTriggered) {
+        // Let the user override the heuristic
+        const openAnyway = confirm('Warning: This URL looks like phishing. Do you want to open it anyway?');
+        userOverrideOpen = !!openAnyway;
+        if (!openAnyway) {
+            saveHistory(url, '⚠ Detected likely phishing (client heuristic)');
+            // Update UI to show phishing risk as 100%
+            try {
+                const resultBox = document.getElementById('resultBox');
+                resultBox.className = 'result danger';
+                resultBox.innerHTML = '⚠ Detected likely phishing (client heuristic)';
+                const riskBar = document.getElementById('riskBar');
+                riskBar.style.width = '100%';
+                riskBar.innerHTML = '100.00%';
+                const riskTextEl = document.getElementById('riskText');
+                if (riskTextEl) riskTextEl.innerText = '100.00%';
+            } catch (e) { /* ignore UI errors */ }
+            return;
+        }
+        // If user chooses to open anyway, we'll navigate immediately after creating the preview tab
+    }
+
+    // Open a blank tab immediately to ensure the browser treats this as a user gesture
+    // then navigate it right away so the site opens instantly while scanning runs in background.
+    let previewTab = null;
+    try {
+        previewTab = window.open('', '_blank');
+    } catch (e) {
+        previewTab = null;
+    }
+
+    // Do NOT navigate the preview tab yet — wait for server scan result.
+    // Prepare the fully-qualified URL to navigate later if allowed.
+    let openUrl = url;
+    if (!openUrl.startsWith("http://") && !openUrl.startsWith("https://")) {
+        openUrl = "http://" + openUrl;
+    }
+
+    // If user explicitly chose to open despite heuristic, navigate immediately
+    if (typeof userOverrideOpen !== 'undefined' && userOverrideOpen) {
+        try {
+            if (previewTab && !previewTab.closed) {
+                previewTab.location = openUrl;
+                previewTab.focus();
+            } else {
+                previewTab = window.open(openUrl, '_blank');
+            }
+        } catch (e) {
+            try { previewTab = window.open(openUrl, '_blank'); } catch (e2) { /* ignore */ }
+        }
+    }
+
+    document.getElementById("loader").style.display = "block";
+
+    // Add a timeout to avoid long waits in the UI
+    const controller = new AbortController();
+    const timeoutMs = 12000; // 12 seconds
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let data = null;
+    try {
+        const response = await fetch("/predict", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({url: url}),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            throw new Error('Server returned ' + response.status + ' ' + response.statusText + ' - ' + text);
+        }
+
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.includes('application/json')) {
+            // Server returned HTML or other non-JSON content (often the index page or an error page)
+            const text = await response.text().catch(() => '');
+            console.error('Expected JSON but received:', text);
+            throw new Error('Invalid server response: expected JSON payload');
+        }
+
+        data = await response.json();
+        console.log('scan response', data);
+    } catch (err) {
+        console.error('Scan error:', err);
+        document.getElementById("loader").style.display = "none";
+        // Close preview tab on error if it exists (avoid leaving blank tabs)
+        try { if (previewTab && !previewTab.closed) previewTab.close(); } catch (e) {}
+        alert("Error scanning URL or request timed out. Check console for details.");
+        return;
+    }
+
+    document.getElementById("loader").style.display = "none";
+
+    let resultDiv = document.getElementById("resultBox");
+
+    // Prefer server 'action' when present
+    if (data.action === 'redirect' || (data.prediction && data.prediction.includes("Legitimate"))) {
+        resultDiv.className = "result safe";
+    } else {
+        resultDiv.className = "result danger";
+    }
+
+    resultDiv.innerHTML = data.prediction || '';
+
+    let riskBar = document.getElementById("riskBar");
+    const numericRisk = (data && !isNaN(Number(data.risk))) ? Number(data.risk) : 0;
+    // ensure bar shows a minimum width for visibility when very small
+    const displayWidth = Math.min(100, Math.max(1, numericRisk));
+    riskBar.style.width = displayWidth + "%";
+    riskBar.innerHTML = numericRisk.toFixed(2) + "%";
+    const riskTextEl = document.getElementById('riskText');
+    if (riskTextEl) riskTextEl.innerText = numericRisk.toFixed(2) + "%";
+
+    saveHistory(url, data.prediction || (data.action === 'block' ? '⚠ Phishing (server)' : 'Result'));
+
+    // Handle server-declared actions
+    if (data.action === 'redirect') {
+        // Legitimate: navigate the preview tab to the official URL and focus it.
+        try {
+            if (previewTab && !previewTab.closed) {
+                previewTab.location = openUrl;
+                previewTab.focus();
+            } else {
+                window.open(openUrl, '_blank');
+            }
+        } catch (e) {
+            try { window.open(openUrl, '_blank'); } catch (e2) { /* ignore */ }
+        }
+        return;
+    }
+
+    if (data.action === 'block') {
+        // Server flagged phishing: close the preview tab (if blank) and show a clear warning
+        try { if (previewTab && !previewTab.closed) previewTab.close(); } catch (e) {}
+        alert("Warning: This site has been flagged as phishing. Do not enter credentials or sensitive information.");
+        return;
+    }
+
+    // Fallback behavior when server doesn't provide an action
+    const RISK_THRESHOLD = 70; // percentage threshold to decide auto-open
+    if (data.prediction && data.prediction.includes("Legitimate") && numericRisk < RISK_THRESHOLD) {
+        // Navigate preview tab now
+        try {
+            if (previewTab && !previewTab.closed) {
+                previewTab.location = openUrl;
+                previewTab.focus();
+            } else {
+                window.open(openUrl, '_blank');
+            }
+        } catch (e) {
+            try { window.open(openUrl, '_blank'); } catch (e2) { /* ignore */ }
+        }
+    } else {
+        // Close preview tab and warn
+        try { if (previewTab && !previewTab.closed) previewTab.close(); } catch (e) {}
+        alert("Warning: This site may be a phishing site. Do not enter credentials or sensitive information.");
+    }
+}
+
+function toggleMode() {
+    document.body.classList.toggle("dark");
+}
+
+function saveHistory(url, result) {
+    let history = JSON.parse(localStorage.getItem("history")) || [];
+    history.push({url, result});
+    localStorage.setItem("history", JSON.stringify(history));
+    displayHistory();
+}
+
+function displayHistory() {
+    let history = JSON.parse(localStorage.getItem("history")) || [];
+    let html = "<b>Scan History:</b><br>";
+    history.slice(-5).reverse().forEach(item => {
+        html += item.url + " → " + item.result + "<br>";
+    });
+    document.getElementById("history").innerHTML = html;
+}
+
+displayHistory();
+</script>
+
+</body>
+</html>
