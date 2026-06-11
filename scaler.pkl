@@ -1,0 +1,28 @@
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+import pickle
+
+# 🔹 Load your dataset
+data = pd.read_csv("phishing.csv")   # make sure file exists
+
+# 🔹 Split features and label
+X = data.drop("label", axis=1)   # change 'label' if your column name is different
+y = data["label"]
+
+# 🔹 Create scaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# 🔹 Train model
+model = RandomForestClassifier()
+model.fit(X_scaled, y)
+
+# 🔹 Save scaler and model
+with open("scaler.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+
+with open("model.pkl", "wb") as f:
+    pickle.dump(model, f)
+
+print("✅ scaler.pkl and model.pkl created successfully")
